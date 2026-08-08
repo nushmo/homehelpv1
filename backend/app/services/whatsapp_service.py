@@ -7,22 +7,29 @@ logger = logging.getLogger("homehelp.service.whatsapp")
 
 
 class WhatsAppService:
-    def __init__(self):
-        self.token = settings.WHATSAPP_TOKEN
-        self.phone_number_id = settings.WHATSAPP_PHONE_NUMBER_ID
+    @property
+    def token(self) -> str:
+        return settings.WHATSAPP_TOKEN
+
+    @property
+    def phone_number_id(self) -> str:
+        return settings.WHATSAPP_PHONE_NUMBER_ID
 
     def send_text_message(self, recipient_phone: str, message_text: str) -> bool:
         clean_phone = recipient_phone.replace("+", "").replace(" ", "").replace("-", "")
 
-        if not self.token or "mock" in self.token or not self.phone_number_id or "mock" in self.phone_number_id:
+        token = self.token
+        phone_id = self.phone_number_id
+
+        if not token or "mock" in token or not phone_id or "mock" in phone_id:
             logger.info(
                 f"[MOCK WHATSAPP SEND] To: {clean_phone}\nMessage:\n{message_text}\n"
             )
             return True
 
-        url = f"https://graph.facebook.com/v18.0/{self.phone_number_id}/messages"
+        url = f"https://graph.facebook.com/v18.0/{phone_id}/messages"
         headers = {
-            "Authorization": f"Bearer {self.token}",
+            "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
         }
         payload = {
@@ -36,9 +43,13 @@ class WhatsAppService:
         try:
             with httpx.Client(timeout=10.0) as client:
                 res = client.post(url, headers=headers, json=payload)
-                res.raise_for_status()
+                if res.status_code >= 400:
+                    logger.error(
+                        f"Meta API Error ({res.status_code}) sending to {clean_phone}: {res.text}"
+                    )
+                    return False
                 logger.info(f"Successfully sent WhatsApp message to {clean_phone}")
                 return True
         except Exception as e:
-            logger.error(f"Failed to send WhatsApp message to {clean_phone}: {e}")
+            logger.error(f"Exception sending WhatsApp message to {clean_phone}: {e}")
             return False
