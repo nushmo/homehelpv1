@@ -1,0 +1,44 @@
+import logging
+from typing import Dict, Any, Optional
+import httpx
+from app.config import settings
+
+logger = logging.getLogger("homehelp.service.whatsapp")
+
+
+class WhatsAppService:
+    def __init__(self):
+        self.token = settings.WHATSAPP_TOKEN
+        self.phone_number_id = settings.WHATSAPP_PHONE_NUMBER_ID
+
+    def send_text_message(self, recipient_phone: str, message_text: str) -> bool:
+        clean_phone = recipient_phone.replace("+", "").replace(" ", "").replace("-", "")
+
+        if not self.token or "mock" in self.token or not self.phone_number_id or "mock" in self.phone_number_id:
+            logger.info(
+                f"[MOCK WHATSAPP SEND] To: {clean_phone}\nMessage:\n{message_text}\n"
+            )
+            return True
+
+        url = f"https://graph.facebook.com/v18.0/{self.phone_number_id}/messages"
+        headers = {
+            "Authorization": f"Bearer {self.token}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": clean_phone,
+            "type": "text",
+            "text": {"preview_url": False, "body": message_text},
+        }
+
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                res = client.post(url, headers=headers, json=payload)
+                res.raise_for_status()
+                logger.info(f"Successfully sent WhatsApp message to {clean_phone}")
+                return True
+        except Exception as e:
+            logger.error(f"Failed to send WhatsApp message to {clean_phone}: {e}")
+            return False
