@@ -38,7 +38,6 @@ Important Rules:
 class GeminiIntentParser:
     def __init__(self):
         self.groq_api_key = settings.GROQ_API_KEY
-        self.gemini_api_key = settings.GEMINI_API_KEY
 
     def parse(self, text: str) -> ParsedIntent:
         text_clean = text.strip()
@@ -52,18 +51,9 @@ class GeminiIntentParser:
                 if parsed:
                     return parsed
             except Exception as e:
-                logger.warning(f"Groq API parsing failed ({e}). Falling back to Gemini / Heuristics.")
+                logger.warning(f"Groq API parsing failed ({e}). Falling back to Heuristics.")
 
-        # 2. Attempt Gemini API call if key is present
-        if self.gemini_api_key and "mock" not in self.gemini_api_key:
-            try:
-                parsed = self._call_gemini_api(text_clean)
-                if parsed:
-                    return parsed
-            except Exception as e:
-                logger.warning(f"Gemini API call failed ({e}). Using heuristic fallback.")
-
-        # 3. Fallback to rule-based heuristic parser
+        # 2. Fallback to rule-based heuristic parser
         return self._heuristic_parse(text_clean)
 
     def _call_groq_api(self, text: str) -> Optional[ParsedIntent]:
