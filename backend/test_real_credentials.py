@@ -1,0 +1,108 @@
+import sys
+import os
+import httpx
+from dotenv import load_dotenv
+
+# Load local .env file
+dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
+load_dotenv(dotenv_path)
+
+print("=" * 60)
+print("🔍 TESTING REAL CREDENTIALS FROM YOUR LOCAL .env FILE")
+print("=" * 60)
+
+supabase_url = os.getenv("SUPABASE_URL", "")
+supabase_key = os.getenv("SUPABASE_KEY", "")
+gemini_key = os.getenv("GEMINI_API_KEY", "")
+whatsapp_token = os.getenv("WHATSAPP_TOKEN", "")
+whatsapp_phone_id = os.getenv("WHATSAPP_PHONE_NUMBER_ID", "")
+verify_token = os.getenv("VERIFY_TOKEN", "")
+
+print(f"1. SUPABASE_URL:          {supabase_url}")
+print(f"2. SUPABASE_KEY:          {supabase_key[:10]}..." if supabase_key else "Missing")
+print(f"3. GEMINI_API_KEY:        {gemini_key[:10]}..." if gemini_key else "Missing")
+print(f"4. WHATSAPP_TOKEN:        {whatsapp_token[:10]}..." if whatsapp_token else "Missing")
+print(f"5. WHATSAPP_PHONE_ID:     {whatsapp_phone_id}")
+print(f"6. VERIFY_TOKEN:          {verify_token}\n")
+
+# ----------------------------------------------------
+# TEST 1: TEST SUPABASE CONNECTION
+# ----------------------------------------------------
+print("--- [TEST 1/3] Testing Supabase Connection ---")
+if "mock" in supabase_url or not supabase_url:
+    print("⚠️ SUPABASE_URL is mock or missing in .env. Skipping live Supabase check.")
+else:
+    try:
+        url = f"{supabase_url}/rest/v1/users?select=count"
+        headers = {"apikey": supabase_key, "Authorization": f"Bearer {supabase_key}"}
+        res = httpx.get(url, headers=headers, timeout=5.0)
+        if res.status_code == 200:
+            print("✅ Supabase REST Connection Successful!")
+        else:
+            print(f"❌ Supabase Error ({res.status_code}): {res.text}")
+    except Exception as e:
+        print(f"❌ Supabase connection failed: {e}")
+
+# ----------------------------------------------------
+# TEST 2: TEST GEMINI API INTENT PARSING
+# ----------------------------------------------------
+print("\n--- [TEST 2/3] Testing Google Gemini API ---")
+if "mock" in gemini_key or not gemini_key:
+    print("⚠️ GEMINI_API_KEY is mock or missing in .env. Skipping live Gemini check.")
+else:
+    models_to_test = ["gemini-2.0-flash", "gemini-1.5-flash"]
+    success = False
+    for m in models_to_test:
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={gemini_key}"
+            payload = {
+                "contents": [{"parts": [{"text": "Parse intent JSON for: Add maid Sunita Salary 9000"}]}]
+            }
+            res = httpx.post(url, json=payload, timeout=10.0)
+            if res.status_code == 200:
+                print(f"✅ Google Gemini API Connection Successful (Using model: {m})!")
+                print(f"Gemini Response: {res.json()['candidates'][0]['content']['parts'][0]['text'][:100]}...")
+                success = True
+                break
+            elif res.status_code == 404:
+                print(f"Model {m} returned 404. Trying next model...")
+            else:
+                print(f"❌ Gemini API Error ({res.status_code}) on {m}: {res.text}")
+        except Exception as e:
+            print(f"❌ Gemini connection failed on {m}: {e}")
+    if not success:
+        print("❌ Could not connect to Gemini API with tested models.")
+
+# ----------------------------------------------------
+# TEST 3: TEST META WHATSAPP CLOUD API SENDING
+# ----------------------------------------------------
+print("\n--- [TEST 3/3] Testing Meta WhatsApp Cloud API Outgoing Message ---")
+if "mock" in whatsapp_token or not whatsapp_token or "mock" in whatsapp_phone_id or not whatsapp_phone_id:
+    print("⚠️ WHATSAPP_TOKEN or WHATSAPP_PHONE_NUMBER_ID is mock/missing in .env. Skipping live WhatsApp send check.")
+else:
+    test_recipient = "919503642976"  # User's phone number
+    url = f"https://graph.facebook.com/v18.0/{whatsapp_phone_id}/messages"
+    headers = {
+        "Authorization": f"Bearer {whatsapp_token}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": test_recipient,
+        "type": "text",
+        "text": {"preview_url": False, "body": "👋 Live Test Message from HomeHelp AI Local Test Script!"},
+    }
+
+    try:
+        res = httpx.post(url, headers=headers, json=payload, timeout=10.0)
+        if res.status_code == 200:
+            print(f"🎉 SUCCESS! Meta WhatsApp API sent live message to +{test_recipient}!")
+            print(f"Meta Response: {res.json()}")
+        else:
+            print(f"❌ Meta WhatsApp API Error ({res.status_code}):")
+            print(res.text)
+    except Exception as e:
+        print(f"❌ Meta WhatsApp API Connection Failed: {e}")
+
+print("=" * 60)

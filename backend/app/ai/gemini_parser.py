@@ -57,47 +57,59 @@ class GeminiIntentParser:
         return self._heuristic_parse(text_clean)
 
     def _call_gemini_api(self, text: str) -> Optional[ParsedIntent]:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={self.api_key}"
-        payload = {
-            "contents": [
-                {
-                    "parts": [
-                        {"text": SYSTEM_PROMPT},
-                        {"text": f"User Input: {text}"}
-                    ]
-                }
-            ],
-            "generationConfig": {
-                "response_mime_type": "application/json",
-                "response_schema": {
-                    "type": "OBJECT",
-                    "properties": {
-                        "intent": {
-                            "type": "STRING",
-                            "enum": [e.value for e in IntentType]
+        models = ["gemini-2.0-flash", "gemini-1.5-flash"]
+        for model in models:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}"
+            payload = {
+                "contents": [
+                    {
+                        "parts": [
+                            {"text": SYSTEM_PROMPT},
+                            {"text": f"User Input: {text}"}
+                        ]
+                    }
+                ],
+                "generationConfig": {
+                    "response_mime_type": "application/json",
+                    "response_schema": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "intent": {
+                                "type": "STRING",
+                                "enum": [e.value for e in IntentType]
+                            },
+                            "worker_name": {"type": "STRING"},
+                            "role": {"type": "STRING"},
+                            "monthly_salary": {"type": "NUMBER"},
+                            "weekly_off": {"type": "STRING"},
+                            "working_days_per_month": {"type": "INTEGER"},
+                            "amount": {"type": "NUMBER"},
+                            "date": {"type": "STRING"},
+                            "notes": {"type": "STRING"},
+                            "clarification_needed": {"type": "STRING"}
                         },
-                        "worker_name": {"type": "STRING"},
-                        "role": {"type": "STRING"},
-                        "monthly_salary": {"type": "NUMBER"},
-                        "weekly_off": {"type": "STRING"},
-                        "working_days_per_month": {"type": "INTEGER"},
-                        "amount": {"type": "NUMBER"},
-                        "date": {"type": "STRING"},
-                        "notes": {"type": "STRING"},
-                        "clarification_needed": {"type": "STRING"}
-                    },
-                    "required": ["intent"]
+                        "required": ["intent"]
+                    }
                 }
             }
-        }
 
-        with httpx.Client(timeout=10.0) as client:
-            res = client.post(url, json=payload)
-            res.raise_for_status()
-            data = res.json()
-            raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
-            json_obj = json.loads(raw_text)
-            return ParsedIntent(**json_obj)
+            try:
+                with httpx.Client(timeout=10.0) as client:
+                    res = client.post(url, json=payload)
+                    if res.status_code == 200:
+                        data = res.json()
+                        raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
+                        json_obj = json.loads(raw_text)
+                        return ParsedIntent(**json_obj)
+                    elif res.status_code == 404:
+                        logger.warning(f"Gemini model {model} returned 404. Trying fallback model...")
+                        continue
+                    else:
+                        logger.error(f"Gemini API Error ({res.status_code}): {res.text}")
+            except Exception as e:
+                logger.error(f"Gemini call error on model {model}: {e}")
+
+        return None
 
     def _heuristic_parse(self, text: str) -> ParsedIntent:
         lower = text.lower()

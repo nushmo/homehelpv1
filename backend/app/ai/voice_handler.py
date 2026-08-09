@@ -64,7 +64,7 @@ class VoiceHandler:
     ) -> ParsedIntent:
         """Uses Gemini API to transcribe audio and return structured intent."""
         import base64
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={self.api_key}"
+        import json
         encoded_audio = base64.b64encode(audio_bytes).decode("utf-8")
 
         prompt = (
@@ -72,30 +72,40 @@ class VoiceHandler:
             "Return JSON matching ParsedIntent schema."
         )
 
-        payload = {
-            "contents": [
-                {
-                    "parts": [
-                        {"text": prompt},
-                        {
-                            "inline_data": {
-                                "mime_type": mime_type,
-                                "data": encoded_audio
+        models = ["gemini-2.0-flash", "gemini-1.5-flash"]
+        for model in models:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}"
+            payload = {
+                "contents": [
+                    {
+                        "parts": [
+                            {"text": prompt},
+                            {
+                                "inline_data": {
+                                    "mime_type": mime_type,
+                                    "data": encoded_audio
+                                }
                             }
-                        }
-                    ]
+                        ]
+                    }
+                ],
+                "generationConfig": {
+                    "response_mime_type": "application/json"
                 }
-            ],
-            "generationConfig": {
-                "response_mime_type": "application/json"
             }
-        }
 
-        with httpx.Client(timeout=15.0) as client:
-            res = client.post(url, json=payload)
-            res.raise_for_status()
-            data = res.json()
-            raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
-            import json
-            json_obj = json.loads(raw_text)
-            return ParsedIntent(**json_obj)
+            try:
+                with httpx.Client(timeout=15.0) as client:
+                    res = client.post(url, json=payload)
+                    if res.status_code == 200:
+                        data = res.json()
+                        raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
+                        json_obj = json.loads(raw_text)
+                        return ParsedIntent(**json_obj)
+                    elif res.status_code == 404:
+                        logger.warning(f"Gemini voice model {model} returned 404. Trying fallback model...")
+                        continue
+            except Exception as e:
+                logger.error(f"Gemini voice error on model {model}: {e}")
+
+        return self.parser.parse("Help voice message error")
