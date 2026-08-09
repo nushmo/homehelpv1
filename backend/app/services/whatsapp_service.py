@@ -21,7 +21,10 @@ class WhatsAppService:
         token = self.token
         phone_id = self.phone_number_id
 
+        print(f"📡 [WHATSAPP SEND ATTEMPT] PhoneID={phone_id}, Recipient={clean_phone}, TokenPrefix={token[:10] if token else 'None'}", flush=True)
+
         if not token or "mock" in token or not phone_id or "mock" in phone_id:
+            print(f"⚠️ [MOCK WHATSAPP SEND ENABLED] WHATSAPP_TOKEN or WHATSAPP_PHONE_NUMBER_ID contains 'mock' in environment variables! To: {clean_phone}", flush=True)
             logger.info(
                 f"[MOCK WHATSAPP SEND] To: {clean_phone}\nMessage:\n{message_text}\n"
             )
