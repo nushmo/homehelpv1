@@ -37,15 +37,25 @@ Important Rules:
 
 class GeminiIntentParser:
     def __init__(self):
-        self.api_key = settings.GEMINI_API_KEY
+        self.groq_api_key = settings.GROQ_API_KEY
+        self.gemini_api_key = settings.GEMINI_API_KEY
 
     def parse(self, text: str) -> ParsedIntent:
         text_clean = text.strip()
         if not text_clean:
             return ParsedIntent(intent=IntentType.UNKNOWN)
 
-        # Attempt Gemini API call if key is valid
-        if self.api_key and "mock" not in self.api_key:
+        # 1. Attempt Groq API call if key is present
+        if self.groq_api_key and "mock" not in self.groq_api_key:
+            try:
+                parsed = self._call_groq_api(text_clean)
+                if parsed:
+                    return parsed
+            except Exception as e:
+                logger.warning(f"Groq API parsing failed ({e}). Falling back to Gemini / Heuristics.")
+
+        # 2. Attempt Gemini API call if key is present
+        if self.gemini_api_key and "mock" not in self.gemini_api_key:
             try:
                 parsed = self._call_gemini_api(text_clean)
                 if parsed:
@@ -53,8 +63,57 @@ class GeminiIntentParser:
             except Exception as e:
                 logger.warning(f"Gemini API call failed ({e}). Using heuristic fallback.")
 
-        # Fallback to rule-based heuristic parser
+        # 3. Fallback to rule-based heuristic parser
         return self._heuristic_parse(text_clean)
+
+    def _call_groq_api(self, text: str) -> Optional[ParsedIntent]:
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self.groq_api_key}",
+            "Content-Type": "application/json",
+        }
+
+        json_schema_prompt = (
+            SYSTEM_PROMPT + "\n\n"
+            "Respond ONLY with valid JSON matching this exact structure:\n"
+            '{\n'
+            '  "intent": "REGISTER_WORKER" | "REMOVE_WORKER" | "UPDATE_WORKER" | "ABSENT" | "HALF_DAY" | "PLANNED_LEAVE" | "ADVANCE" | "BONUS" | "PAYMENT" | "GENERATE_PAYMENT" | "HELP" | "UNKNOWN",\n'
+            '  "worker_name": string or null,\n'
+            '  "role": string or null,\n'
+            '  "monthly_salary": number or null,\n'
+            '  "weekly_off": string or null,\n'
+            '  "working_days_per_month": number or 26,\n'
+            '  "amount": number or null,\n'
+            '  "date": "today" or "yesterday" or "tomorrow" or "YYYY-MM-DD",\n'
+            '  "notes": string or null,\n'
+            '  "clarification_needed": string or null\n'
+            '}'
+        )
+
+        payload = {
+            "model": "llama-3.3-70b-versatile",
+            "messages": [
+                {"role": "system", "content": json_schema_prompt},
+                {"role": "user", "content": text},
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0.0,
+        }
+
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                res = client.post(url, headers=headers, json=payload)
+                if res.status_code == 200:
+                    raw_text = res.json()["choices"][0]["message"]["content"]
+                    json_obj = json.loads(raw_text)
+                    logger.info("Successfully parsed intent using Groq LLaMA 3.3 70B.")
+                    return ParsedIntent(**json_obj)
+                else:
+                    logger.warning(f"Groq API returned status {res.status_code}: {res.text}")
+        except Exception as e:
+            logger.error(f"Groq API execution failed: {e}")
+
+        return None
 
     def _call_gemini_api(self, text: str) -> Optional[ParsedIntent]:
         models = ["gemini-2.0-flash", "gemini-1.5-flash"]

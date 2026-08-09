@@ -11,27 +11,61 @@ logger = logging.getLogger("homehelp.ai.voice")
 class VoiceHandler:
     def __init__(self):
         self.parser = GeminiIntentParser()
-        self.api_key = settings.GEMINI_API_KEY
+        self.groq_api_key = settings.GROQ_API_KEY
+        self.gemini_api_key = settings.GEMINI_API_KEY
         self.whatsapp_token = settings.WHATSAPP_TOKEN
 
     def process_voice_media(
         self, media_id: str, mime_type: str = "audio/ogg"
     ) -> ParsedIntent:
-        """Download voice media from WhatsApp Cloud API and parse intent using Gemini."""
+        """Download voice media from WhatsApp Cloud API and parse intent using Groq or Gemini."""
         audio_bytes = self._download_whatsapp_media(media_id)
         if not audio_bytes:
             logger.warning(f"Could not download WhatsApp media {media_id}. Returning UNKNOWN intent.")
             return self.parser.parse("Help voice message error")
 
-        if self.api_key and "mock" not in self.api_key:
+        # 1. Attempt Groq Whisper transcription if Groq key present
+        if self.groq_api_key and "mock" not in self.groq_api_key:
             try:
-                # Transcribe & parse audio using Gemini Multimodal
+                transcript = self._transcribe_with_groq_whisper(audio_bytes, mime_type)
+                if transcript:
+                    logger.info(f"Groq Whisper Transcribed voice note: '{transcript}'")
+                    return self.parser.parse(transcript)
+            except Exception as e:
+                logger.error(f"Error transcribing audio with Groq Whisper ({e}).")
+
+        # 2. Fallback to Gemini Multimodal
+        if self.gemini_api_key and "mock" not in self.gemini_api_key:
+            try:
                 return self._process_audio_with_gemini(audio_bytes, mime_type)
             except Exception as e:
                 logger.error(f"Error processing audio with Gemini ({e}).")
 
         # Mock fallback for test environment
         return self.parser.parse("Sunita absent today")
+
+    def _transcribe_with_groq_whisper(
+        self, audio_bytes: bytes, mime_type: str = "audio/ogg"
+    ) -> Optional[str]:
+        """Transcribes audio bytes using Groq Whisper API (whisper-large-v3-turbo)."""
+        url = "https://api.groq.com/openai/v1/audio/transcriptions"
+        headers = {"Authorization": f"Bearer {self.groq_api_key}"}
+
+        filename = "voice.ogg" if "ogg" in mime_type else "voice.mp3"
+        files = {"file": (filename, audio_bytes, mime_type)}
+        data = {"model": "whisper-large-v3-turbo", "response_format": "json"}
+
+        try:
+            with httpx.Client(timeout=15.0) as client:
+                res = client.post(url, headers=headers, files=files, data=data)
+                if res.status_code == 200:
+                    return res.json().get("text")
+                else:
+                    logger.warning(f"Groq Whisper API returned {res.status_code}: {res.text}")
+        except Exception as e:
+            logger.error(f"Groq Whisper transcription exception: {e}")
+
+        return None
 
     def _download_whatsapp_media(self, media_id: str) -> Optional[bytes]:
         if not self.whatsapp_token or "mock" in self.whatsapp_token:
