@@ -55,6 +55,7 @@ async def handle_whatsapp_webhook(request: Request):
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
 
+    print(f"📥 [WHATSAPP WEBHOOK RECEIVED]: {body}", flush=True)
     logger.info(f"Incoming WhatsApp webhook payload: {body}")
 
     # Extract entry data

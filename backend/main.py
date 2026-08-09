@@ -44,6 +44,13 @@ app.include_router(events_router)
 app.include_router(payment_router)
 app.include_router(analytics_router)
 
+@app.middleware("http")
+async def log_requests(request, call_next):
+    print(f"📥 [HTTP REQUEST] {request.method} {request.url.path}", flush=True)
+    response = await call_next(request)
+    print(f"📤 [HTTP RESPONSE] {request.method} {request.url.path} ──> {response.status_code}", flush=True)
+    return response
+
 
 @app.get("/health", tags=["Health"])
 def health_check():
