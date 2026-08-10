@@ -32,7 +32,7 @@ class WhatsAppService:
             )
             return True
 
-        url = f"https://graph.facebook.com/v18.0/{target_phone_id}/messages"
+        url = f"https://graph.facebook.com/v25.0/{target_phone_id}/messages"
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
@@ -58,3 +58,41 @@ class WhatsAppService:
         except Exception as e:
             logger.error(f"Exception sending WhatsApp message to {clean_phone}: {e}")
             return False
+
+    def send_template_message(
+        self, recipient_phone: str, template_name: str = "hello_world", language_code: str = "en_US", phone_id: Optional[str] = None
+    ) -> bool:
+        clean_phone = recipient_phone.replace("+", "").replace(" ", "").replace("-", "")
+        token = self.token
+        target_phone_id = phone_id or self.phone_number_id
+
+        if not token or "mock" in token or not target_phone_id or "mock" in target_phone_id:
+            return True
+
+        url = f"https://graph.facebook.com/v25.0/{target_phone_id}/messages"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "messaging_product": "whatsapp",
+            "to": clean_phone,
+            "type": "template",
+            "template": {
+                "name": template_name,
+                "language": {"code": language_code}
+            }
+        }
+
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                res = client.post(url, headers=headers, json=payload)
+                if res.status_code == 200:
+                    logger.info(f"Successfully sent template message to {clean_phone}")
+                    return True
+                else:
+                    logger.warning(f"Template message returned status {res.status_code}: {res.text}")
+        except Exception as e:
+            logger.error(f"Exception sending template message: {e}")
+
+        return False
