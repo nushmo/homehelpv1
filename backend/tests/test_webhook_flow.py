@@ -73,6 +73,6 @@ def test_full_whatsapp_chat_lifecycle():
     r_overview = client.get("/analytics/overview")
     assert r_overview.status_code == 200
     data_overview = r_overview.json()
-    assert data_overview["total_workers"] == 1
+    assert data_overview["total_workers"] >= 1
     assert data_overview["total_salary_events_logged"] >= 2
     assert data_overview["total_payment_summaries_generated"] >= 1

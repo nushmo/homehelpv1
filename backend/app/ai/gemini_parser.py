@@ -164,7 +164,8 @@ class GeminiIntentParser:
         lower = text.lower()
 
         # Help / Greeting
-        if lower in ["hi", "hello", "help", "start", "menu"]:
+        greeting_words = ["hi", "hii", "hiii", "hey", "heyy", "hello", "help", "start", "menu", "namaste", "options"]
+        if lower in greeting_words or any(g in lower.split() for g in greeting_words):
             return ParsedIntent(intent=IntentType.HELP)
 
         # Generate Payment
@@ -291,8 +292,7 @@ class GeminiIntentParser:
 
         # Half Day (e.g. "Sunita half day")
         if "half day" in lower or "halfday" in lower:
-            name_match = re.search(r"([a-zA-Z]+)", text)
-            name = name_match.group(1).title() if name_match else None
+            name = extract_name(text, ["half", "day", "halfday", "today", "yesterday", "tomorrow"])
             return ParsedIntent(
                 intent=IntentType.HALF_DAY,
                 worker_name=name,
@@ -301,8 +301,7 @@ class GeminiIntentParser:
 
         # Planned Leave (e.g. "Sunita leave tomorrow")
         if "leave" in lower or "planned leave" in lower:
-            name_match = re.search(r"([a-zA-Z]+)", text)
-            name = name_match.group(1).title() if name_match else None
+            name = extract_name(text, ["leave", "planned", "on", "today", "yesterday", "tomorrow"])
             return ParsedIntent(
                 intent=IntentType.PLANNED_LEAVE,
                 worker_name=name,
@@ -311,8 +310,7 @@ class GeminiIntentParser:
 
         # Absent (e.g. "Sunita absent today")
         if "absent" in lower or "chutti" in lower or "no show" in lower:
-            name_match = re.search(r"([a-zA-Z]+)", text)
-            name = name_match.group(1).title() if name_match else None
+            name = extract_name(text, ["absent", "chutti", "no", "show", "today", "yesterday", "tomorrow"])
             return ParsedIntent(
                 intent=IntentType.ABSENT,
                 worker_name=name,

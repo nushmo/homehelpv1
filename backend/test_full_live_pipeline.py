@@ -21,53 +21,39 @@ from app.api.controllers.webhook import route_intent_to_business_logic
 
 def run_live_pipeline_test():
     print("=" * 60)
-    print("🚀 STEP-BY-STEP LIVE PIPELINE DIAGNOSTIC")
+    print("🚀 STEP-BY-STEP LIVE PIPELINE DIAGNOSTIC (GENERATE PAYMENT)")
     print("=" * 60)
 
     phone = "919503642976"
-    test_message = "Hi"
+    test_message = "Generate payment for Sunita"
 
     user_repo = UserRepository()
+    worker_repo = WorkerRepository()
     whatsapp_service = WhatsAppService()
     parser = GeminiIntentParser()
 
-    print(f"\n1. Fetching or creating user for phone: {phone}...")
-    try:
-        user = user_repo.get_by_phone(phone)
-        if not user:
-            user = user_repo.create(phone, display_name="Vikas Live Test")
-            print(f"✅ User created in DB: {user.id}")
-        else:
-            print(f"✅ Existing User found in DB: {user.id} (step: {user.activation_step})")
-    except Exception as e:
-        print(f"❌ DB User Error: {e}")
-        return
+    print(f"\n1. Fetching user for phone: {phone}...")
+    user = user_repo.get_by_phone(phone)
+    if not user:
+        user = user_repo.create(phone, display_name="Vikas Live Test")
+        print(f"✅ User created in DB: {user.id}")
+    else:
+        print(f"✅ Existing User found in DB: {user.id} (step: {user.activation_step})")
 
     print(f"\n2. Parsing Intent for message: '{test_message}'...")
-    try:
-        parsed = parser.parse(test_message)
-        print(f"✅ Parsed Intent: {parsed.intent} (Worker: {parsed.worker_name})")
-    except Exception as e:
-        print(f"❌ Intent Parsing Error: {e}")
-        return
+    parsed = parser.parse(test_message)
+    print(f"✅ Parsed Intent: {parsed.intent} (Worker: {parsed.worker_name})")
 
     print(f"\n3. Routing Intent to Business Logic...")
-    try:
-        reply_text = route_intent_to_business_logic(user, parsed)
-        print(f"✅ Generated Reply Text:\n{reply_text}")
-    except Exception as e:
-        print(f"❌ Business Logic Error: {e}")
-        return
+    reply_text = route_intent_to_business_logic(user, parsed)
+    print(f"✅ Generated Reply Text:\n{reply_text}")
 
     print(f"\n4. Sending Outgoing WhatsApp Message via Meta API to {phone}...")
-    try:
-        success = whatsapp_service.send_text_message(phone, reply_text)
-        if success:
-            print(f"🎉 SUCCESS! Outgoing WhatsApp reply sent via Meta API!")
-        else:
-            print(f"❌ Meta API failed to send WhatsApp message.")
-    except Exception as e:
-        print(f"❌ WhatsApp Service Exception: {e}")
+    success = whatsapp_service.send_text_message(phone, reply_text)
+    if success:
+        print(f"🎉 SUCCESS! Payment Summary delivered to WhatsApp!")
+    else:
+        print(f"❌ Meta API failed to send WhatsApp message.")
 
     print("=" * 60)
 

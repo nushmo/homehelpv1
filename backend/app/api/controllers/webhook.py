@@ -89,45 +89,77 @@ async def handle_whatsapp_webhook(request: Request):
 
 def process_user_message(phone_number: str, display_name: Optional[str], msg: Dict[str, Any]):
     """Processes a single incoming message from a WhatsApp user."""
-    # 1. Fetch or register homeowner user
-    user = user_repo.get_by_phone(phone_number)
-    if not user:
-        user = user_repo.create(phone_number, display_name=display_name)
-        analytics_repo.log(AnalyticsEventType.USER_STARTED_CHAT, user_id=user.id)
-    else:
-        user_repo.update_last_seen(user.id)
+    print(f"🔄 [PROCESSING MESSAGE] Phone: {phone_number}, Type: {msg.get('type')}", flush=True)
+    try:
+        # 1. Fetch or register homeowner user
+        user = None
+        try:
+            user = user_repo.get_by_phone(phone_number)
+            if not user:
+                user = user_repo.create(phone_number, display_name=display_name)
+                analytics_repo.log(AnalyticsEventType.USER_STARTED_CHAT, user_id=user.id)
+            else:
+                user_repo.update_last_seen(user.id)
+        except Exception as db_err:
+            logger.error(f"User Repo Exception for {phone_number}: {db_err}")
+            from app.models.domain import User
+            user = User(id="fallback-user-id", phone_number=phone_number, display_name=display_name or phone_number)
 
-    msg_type = msg.get("type", "text")
-    parsed_intent: ParsedIntent
+        msg_type = msg.get("type", "text")
+        parsed_intent: ParsedIntent
 
-    # 2. Extract Intent from text or audio
-    if msg_type == "text":
-        text_body = msg.get("text", {}).get("body", "")
-        analytics_repo.log(
-            AnalyticsEventType.TEXT_MESSAGE_RECEIVED,
-            user_id=user.id,
-            metadata={"text": text_body},
-        )
-        parsed_intent = intent_parser.parse(text_body)
+        # 2. Extract Intent from text or audio
+        if msg_type == "text":
+            text_body = msg.get("text", {}).get("body", "")
+            print(f"💬 [INCOMING TEXT]: '{text_body}' from {phone_number}", flush=True)
+            try:
+                analytics_repo.log(
+                    AnalyticsEventType.TEXT_MESSAGE_RECEIVED,
+                    user_id=user.id,
+                    metadata={"text": text_body},
+                )
+            except Exception:
+                pass
+            parsed_intent = intent_parser.parse(text_body)
 
-    elif msg_type == "audio":
-        media_id = msg.get("audio", {}).get("id")
-        mime_type = msg.get("audio", {}).get("mime_type", "audio/ogg")
-        analytics_repo.log(
-            AnalyticsEventType.VOICE_MESSAGE_RECEIVED,
-            user_id=user.id,
-            metadata={"media_id": media_id},
-        )
-        parsed_intent = voice_handler.process_voice_media(media_id, mime_type)
+        elif msg_type == "audio":
+            media_id = msg.get("audio", {}).get("id")
+            mime_type = msg.get("audio", {}).get("mime_type", "audio/ogg")
+            print(f"🎙️ [INCOMING VOICE NOTE]: Media ID {media_id}", flush=True)
+            try:
+                analytics_repo.log(
+                    AnalyticsEventType.VOICE_MESSAGE_RECEIVED,
+                    user_id=user.id,
+                    metadata={"media_id": media_id},
+                )
+            except Exception:
+                pass
+            parsed_intent = voice_handler.process_voice_media(media_id, mime_type)
 
-    else:
-        parsed_intent = ParsedIntent(intent=IntentType.UNKNOWN)
+        else:
+            parsed_intent = ParsedIntent(intent=IntentType.UNKNOWN)
 
-    # 3. Route parsed intent to Business Logic
-    reply_text = route_intent_to_business_logic(user, parsed_intent)
+        print(f"🤖 [PARSED INTENT]: {parsed_intent.intent} for worker '{parsed_intent.worker_name}'", flush=True)
 
-    # 4. Send outgoing WhatsApp response
-    whatsapp_service.send_text_message(user.phone_number, reply_text)
+        # 3. Route parsed intent to Business Logic
+        reply_text = route_intent_to_business_logic(user, parsed_intent)
+
+        # 4. Send outgoing WhatsApp response
+        print(f"📤 [SENDING REPLY]: '{reply_text[:60]}...' to {phone_number}", flush=True)
+        whatsapp_service.send_text_message(user.phone_number, reply_text)
+
+    except Exception as e:
+        import traceback
+        err_msg = f"Error in process_user_message for {phone_number}: {e}\n{traceback.format_exc()}"
+        logger.error(err_msg)
+        print(f"❌ [WEBHOOK PROCESSOR ERROR]: {err_msg}", flush=True)
+        try:
+            whatsapp_service.send_text_message(
+                phone_number,
+                "👋 *HomeHelp AI*: I received your message! Send *HELP* to see all supported options."
+            )
+        except Exception as send_err:
+            logger.error(f"Failed emergency send to {phone_number}: {send_err}")
 
 
 def route_intent_to_business_logic(user: Any, parsed: ParsedIntent) -> str:
