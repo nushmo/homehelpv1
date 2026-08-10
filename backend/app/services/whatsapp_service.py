@@ -23,10 +23,14 @@ class WhatsAppService:
         token = self.token
         target_phone_id = phone_id or self.phone_number_id
 
-        print(f"📡 [WHATSAPP SEND ATTEMPT] PhoneID={target_phone_id}, Recipient={clean_phone}, TokenPrefix={token[:10] if token else 'None'}", flush=True)
+        print(f"========== WHATSAPP SEND ATTEMPT ==========", flush=True)
+        print(f"Recipient: {clean_phone}", flush=True)
+        print(f"Phone ID: {target_phone_id}", flush=True)
+        print(f"Token Prefix: {token[:10] if token else 'None'}", flush=True)
+        print(f"Message Preview: {message_text[:60]}...", flush=True)
 
         if not token or "mock" in token or not target_phone_id or "mock" in target_phone_id:
-            print(f"⚠️ [MOCK WHATSAPP SEND ENABLED] WHATSAPP_TOKEN or WHATSAPP_PHONE_NUMBER_ID contains 'mock' in environment variables! To: {clean_phone}", flush=True)
+            print(f"⚠️ [MOCK WHATSAPP SEND ENABLED] WHATSAPP_TOKEN or WHATSAPP_PHONE_NUMBER_ID contains 'mock'! To: {clean_phone}", flush=True)
             logger.info(
                 f"[MOCK WHATSAPP SEND] To: {clean_phone}\nMessage:\n{message_text}\n"
             )
@@ -48,6 +52,9 @@ class WhatsAppService:
         try:
             with httpx.Client(timeout=10.0) as client:
                 res = client.post(url, headers=headers, json=payload)
+                print(f"WhatsApp API Status: {res.status_code}", flush=True)
+                print(f"WhatsApp API Response: {res.text}", flush=True)
+                print(f"==========================================", flush=True)
                 if res.status_code >= 400:
                     logger.error(
                         f"Meta API Error ({res.status_code}) sending to {clean_phone}: {res.text}"
@@ -56,6 +63,8 @@ class WhatsAppService:
                 logger.info(f"Successfully sent WhatsApp message to {clean_phone}")
                 return True
         except Exception as e:
+            print(f"WhatsApp API Exception: {e}", flush=True)
+            print(f"==========================================", flush=True)
             logger.error(f"Exception sending WhatsApp message to {clean_phone}: {e}")
             return False
 

@@ -55,7 +55,9 @@ async def handle_whatsapp_webhook(request: Request):
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
 
-    print(f"📥 [WHATSAPP WEBHOOK RECEIVED]: {body}", flush=True)
+    print(f"\n========== CHECKPOINT 1: WEBHOOK RECEIVED ==========", flush=True)
+    print(f"Payload: {body}", flush=True)
+    print(f"====================================================", flush=True)
     logger.info(f"Incoming WhatsApp webhook payload: {body}")
 
     # Extract entry data
@@ -96,7 +98,11 @@ def process_user_message(
     incoming_phone_id: Optional[str] = None,
 ):
     """Processes a single incoming message from a WhatsApp user."""
-    print(f"🔄 [PROCESSING MESSAGE] Phone: {phone_number}, Type: {msg.get('type')}", flush=True)
+    print(f"\n========== CHECKPOINT 2: PROCESS USER MESSAGE ==========", flush=True)
+    print(f"Sender Phone: {phone_number}", flush=True)
+    print(f"Display Name: {display_name}", flush=True)
+    print(f"Incoming Phone ID: {incoming_phone_id}", flush=True)
+    print(f"========================================================", flush=True)
     try:
         # 1. Fetch or register homeowner user
         user = None
@@ -151,9 +157,14 @@ def process_user_message(
         # 3. Route parsed intent to Business Logic
         reply_text = route_intent_to_business_logic(user, parsed_intent)
 
+        print(f"\n========== CHECKPOINT 3: ABOUT TO SEND REPLY ==========", flush=True)
+        print(f"User Phone: {user.phone_number}", flush=True)
+        print(f"Reply Preview: '{reply_text[:60]}...'", flush=True)
+        print(f"========================================================", flush=True)
+
         # 4. Send outgoing WhatsApp response
-        print(f"📤 [SENDING REPLY]: '{reply_text[:60]}...' to {phone_number}", flush=True)
-        whatsapp_service.send_text_message(user.phone_number, reply_text, phone_id=incoming_phone_id)
+        clean_phone = phone_number.replace("+", "").replace(" ", "").replace("-", "")
+        whatsapp_service.send_text_message(clean_phone, reply_text, phone_id=incoming_phone_id)
 
     except Exception as e:
         import traceback
