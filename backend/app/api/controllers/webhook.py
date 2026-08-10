@@ -66,6 +66,8 @@ async def handle_whatsapp_webhook(request: Request):
     for entry in entries:
         for change in entry.get("changes", []):
             val = change.get("value", {})
+            metadata = val.get("metadata", {})
+            phone_number_id = metadata.get("phone_number_id")
             messages = val.get("messages", [])
             contacts = val.get("contacts", [])
 
@@ -82,12 +84,17 @@ async def handle_whatsapp_webhook(request: Request):
                     profile = contacts[0].get("profile", {})
                     display_name = profile.get("name")
 
-                process_user_message(sender_phone, display_name, msg)
+                process_user_message(sender_phone, display_name, msg, incoming_phone_id=phone_number_id)
 
     return {"status": "ok"}
 
 
-def process_user_message(phone_number: str, display_name: Optional[str], msg: Dict[str, Any]):
+def process_user_message(
+    phone_number: str,
+    display_name: Optional[str],
+    msg: Dict[str, Any],
+    incoming_phone_id: Optional[str] = None,
+):
     """Processes a single incoming message from a WhatsApp user."""
     print(f"🔄 [PROCESSING MESSAGE] Phone: {phone_number}, Type: {msg.get('type')}", flush=True)
     try:
@@ -146,7 +153,7 @@ def process_user_message(phone_number: str, display_name: Optional[str], msg: Di
 
         # 4. Send outgoing WhatsApp response
         print(f"📤 [SENDING REPLY]: '{reply_text[:60]}...' to {phone_number}", flush=True)
-        whatsapp_service.send_text_message(user.phone_number, reply_text)
+        whatsapp_service.send_text_message(user.phone_number, reply_text, phone_id=incoming_phone_id)
 
     except Exception as e:
         import traceback
@@ -156,7 +163,8 @@ def process_user_message(phone_number: str, display_name: Optional[str], msg: Di
         try:
             whatsapp_service.send_text_message(
                 phone_number,
-                "👋 *HomeHelp AI*: I received your message! Send *HELP* to see all supported options."
+                "👋 *HomeHelp AI*: I received your message! Send *HELP* to see all supported options.",
+                phone_id=incoming_phone_id
             )
         except Exception as send_err:
             logger.error(f"Failed emergency send to {phone_number}: {send_err}")
