@@ -9,6 +9,7 @@ from app.api.controllers import (
     events_router,
     payment_router,
     analytics_router,
+    legal_router,
 )
 
 # Configure logging
@@ -43,6 +44,7 @@ app.include_router(workers_router)
 app.include_router(events_router)
 app.include_router(payment_router)
 app.include_router(analytics_router)
+app.include_router(legal_router)
 
 @app.middleware("http")
 async def log_requests(request, call_next):
